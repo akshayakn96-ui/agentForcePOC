@@ -1,0 +1,25 @@
+diff --git a/node_modules/@react-native-community/cli-platform-android/native_modules.gradle b/node_modules/@react-native-community/cli-platform-android/native_modules.gradle
+index d03521c..f79ec8c 100644
+--- a/node_modules/@react-native-community/cli-platform-android/native_modules.gradle
++++ b/node_modules/@react-native-community/cli-platform-android/native_modules.gradle
+@@ -429,10 +429,18 @@ class ReactNativeModules {
+      * @todo: `fastlane` has been reported to not work too.
+      */
+     def cliResolveScript = "try {console.log(require('@react-native-community/cli').bin);} catch (e) {console.log(require('react-native/cli').bin);}"
+-    String[] nodeCommand = ["node", "-e", cliResolveScript]
++    def nodeExecutable = "node"
++    if (Os.isFamily(Os.FAMILY_MAC)) {
++        if (new File("/opt/homebrew/bin/node").exists()) {
++            nodeExecutable = "/opt/homebrew/bin/node"
++        } else if (new File("/usr/local/bin/node").exists()) {
++            nodeExecutable = "/usr/local/bin/node"
++        }
++    }
++    String[] nodeCommand = [nodeExecutable, "-e", cliResolveScript]
+     def cliPath = this.getCommandOutput(nodeCommand, this.root)
+ 
+-    String[] reactNativeConfigCommand = ["node", cliPath, "config"]
++    String[] reactNativeConfigCommand = [nodeExecutable, cliPath, "config"]
+     def reactNativeConfigOutput = this.getCommandOutput(reactNativeConfigCommand, this.root)
+ 
+     def json

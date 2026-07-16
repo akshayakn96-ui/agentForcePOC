@@ -1,0 +1,154 @@
+/*
+ * Copyright (c) 2024-present, salesforce.com, inc.
+ * All rights reserved.
+ *
+ * Bridge navigation that forwards Agentforce SDK navigation requests to React Native JS via events.
+ */
+package com.salesforce.android.reactagentforce
+
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.ReactContext
+import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.salesforce.android.mobile.interfaces.navigation.Navigation
+import com.salesforce.android.mobile.interfaces.navigation.NavigationTarget
+import com.salesforce.android.mobile.interfaces.navigation.destination.App
+import com.salesforce.android.mobile.interfaces.navigation.destination.Destination
+import com.salesforce.android.mobile.interfaces.navigation.destination.Link
+import com.salesforce.android.mobile.interfaces.navigation.destination.ObjectHome
+import com.salesforce.android.mobile.interfaces.navigation.destination.PageReference
+import com.salesforce.android.mobile.interfaces.navigation.destination.QuickAction
+import com.salesforce.android.mobile.interfaces.navigation.destination.Record
+import org.json.JSONObject
+
+/**
+ * Implements the Agentforce SDK Navigation interface and forwards navigation requests
+ * to JavaScript via NativeEventEmitter events.
+ *
+ * Navigation forwarding is disabled by default and enabled when JS registers a NavigationDelegate.
+ */
+class BridgeNavigation(private val reactContext: ReactContext) : Navigation {
+
+    /** Controls whether navigation requests are forwarded to JS. */
+    var forwardingEnabled: Boolean = false
+
+    override fun goto(destination: Destination) {
+        if (!forwardingEnabled) return
+        emitDestination(destination, replace = false)
+    }
+
+    override fun goto(destination: Destination, replace: Boolean) {
+        if (!forwardingEnabled) return
+        emitDestination(destination, replace = replace)
+    }
+
+    // SDK 262.0 added a target-aware overload. The bridge surfaces a single
+    // navigation event to JS and does not distinguish targets, so forward the
+    // destination using the same emit path (honoring replace).
+    override fun goto(destination: Destination, target: NavigationTarget, replace: Boolean) {
+        if (!forwardingEnabled) return
+        emitDestination(destination, replace = replace)
+    }
+
+    override fun openApp(app: App): App.OpenResult {
+        if (!forwardingEnabled) return App.OpenResult.NOTOPEN
+
+        val params = Arguments.createMap().apply {
+            putString("type", "app")
+            putString("packageName", app.packageName)
+            app.uri?.let { putString("uri", it.toString()) }
+        }
+        reactContext
+            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("onNavigationRequest", params)
+
+        // We can't know if JS actually opened the app, so return OPEN optimistically
+        return App.OpenResult.OPEN
+    }
+
+    private fun emitDestination(destination: Destination, replace: Boolean) {
+        // Handle toast PageReferences locally instead of forwarding to JS.
+        // The SDK uses navigation.goto(PageReference) with type "native__displayToast"
+        // for feedback confirmation and clipboard copy toasts.
+        if (destination is PageReference) {
+            val ref = destination.pageReference
+            if (ref != null && ref.contains("native__displayToast")) {
+                showNativeToast(ref)
+                return
+            }
+        }
+
+        val params = Arguments.createMap()
+
+        when (destination) {
+            is Record -> {
+                params.putString("type", "record")
+                params.putString("recordId", destination.id)
+                destination.type?.let { params.putString("objectType", it) }
+                // The Android SDK leaves Record.pageReference null on a tapped record (its nav
+                // call sites use the short Record(id, type) constructor), whereas the iOS SDK's
+                // Record self-populates a standard__recordPage pageReference. Synthesize the same
+                // shape here so JS consumers get a consistent payload cross-platform (W-23294974).
+                // Use the SDK-provided value when present so the edit flow's pageReference (and a
+                // future SDK that populates it) is never clobbered.
+                val pageReference = destination.pageReference
+                    ?: recordPageReference(destination.id, destination.type)
+                params.putString("pageReference", pageReference)
+            }
+            is ObjectHome -> {
+                params.putString("type", "objectHome")
+                params.putString("objectType", destination.type)
+                destination.pageReference?.let { params.putString("pageReference", it) }
+            }
+            is Link -> {
+                params.putString("type", "link")
+                params.putString("uri", destination.uri.toString())
+                destination.pageReference?.let { params.putString("pageReference", it) }
+            }
+            is QuickAction -> {
+                params.putString("type", "quickAction")
+                params.putString("actionName", destination.actionName)
+                destination.target?.let { target ->
+                    params.putString("recordId", target.id)
+                    target.type?.let { params.putString("objectType", it) }
+                }
+            }
+            is PageReference -> {
+                params.putString("type", "pageReference")
+                destination.pageReference?.let { params.putString("pageReference", it) }
+            }
+            else -> {
+                params.putString("type", "unknown")
+                params.putString("raw", destination.toString())
+            }
+        }
+
+        if (replace) {
+            params.putBoolean("replace", true)
+        }
+
+        reactContext
+            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("onNavigationRequest", params)
+    }
+
+    private fun showNativeToast(pageReferenceJson: String) {
+        try {
+            val json = JSONObject(pageReferenceJson)
+            val message = json.optString("message", "")
+            if (message.isNotEmpty()) {
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(
+                        reactContext.applicationContext,
+                        message,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        } catch (_: Exception) {
+            // Malformed toast JSON — silently ignore
+        }
+    }
+}
