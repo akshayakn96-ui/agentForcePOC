@@ -553,6 +553,30 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
         }
     }
 
+    /**
+     * Send a text message to the conversation
+     */
+    // Note: Direct message sending via conversation object is not exposed by the SDK
+    // Messages are sent through the native Agentforce UI overlay.
+    // The message API provides receiving/listening capabilities via:
+    // - enableMessageForwarding() to control event delivery
+    // - setUIDelegate() to receive onUtteranceSent and onAgentResponse events
+
+    // endregion
+
+    // region Message Event Forwarding
+
+    /**
+     * Enable/disable forwarding of message events to React Native JS
+     * When enabled, emits events: onUtteranceSent, onAgentResponse, onAgentSwitch, onModifyUtteranceRequest
+     */
+    @ReactMethod
+    fun enableMessageForwarding(enabled: Boolean, promise: Promise) {
+        bridgeUIDelegate.forwardingEnabled = enabled
+        Log.d(TAG, "Message forwarding ${if (enabled) "enabled" else "disabled"}")
+        promise.resolve(true)
+    }
+
     // endregion
 
     // region Configuration Query Methods

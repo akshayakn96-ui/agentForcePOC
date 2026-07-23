@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -199,22 +201,25 @@ private fun ConversationOverlayContent(onClose: () -> Unit) {
     val surfaceColor = ChatBrand.ChatSurface
 
     MaterialTheme {
-        Box(
+        Surface(
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { heightPx = it.height }
-                .graphicsLayer { this.translationY = translationY }
-                // Background before the insets, so the padded strips aren't transparent
-                // (host screen bleed-through); after graphicsLayer so it slides on hide.
-                .background(surfaceColor)
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .imePadding()
+                .graphicsLayer { this.translationY = translationY },
+            color = surfaceColor
         ) {
-            client.AgentforceConversationContainer(
-                conversation = conversation,
-                onClose = onClose
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .imePadding()
+            ) {
+                client.AgentforceConversationContainer(
+                    conversation = conversation,
+                    onClose = onClose
+                )
+            }
         }
     }
 }

@@ -15,7 +15,7 @@ import androidx.compose.ui.graphics.Color
 object ChatBrand {
     val Header = Color(0xFFF05637)
     val HeaderContent = Color.White
-    val ChatSurface = Color(0xFFFFF7F5)
+    val ChatSurface = Color(0xFFFFED4E)
     val MarkBackground = Color(0xFF784944)
     val Accent = Color(0xFFF05637)
 

@@ -134,6 +134,7 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ navigation, route }) =>
         organizationId: organizationId.trim(),
         esDeveloperName: esDeveloperName.trim(),
       });
+      console.log('heyyyy');
 
       Alert.alert('Success', 'Service Agent configured successfully!', [
         { text: 'OK', onPress: () => navigation.goBack() },

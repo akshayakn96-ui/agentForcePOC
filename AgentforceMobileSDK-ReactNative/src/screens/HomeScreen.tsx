@@ -216,7 +216,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         }
       }
 
-      await AgentforceService.launchConversation();
+      // Enable message forwarding to receive events in React Native
+      await AgentforceService.enableMessageForwarding(true);
+
+      // Navigate to custom chat UI instead of native overlay
+      navigation.navigate('CustomChat');
     } catch (error) {
       Alert.alert('Error', 'Failed to launch Service Agent. Please check your configuration.');
       console.error('Launch error:', error);
@@ -262,7 +266,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           { ...EMPLOYEE_AGENT_CONFIG, agentId: agentId, agentLabel: '', featureFlags };
       await AgentforceService.configure(config);
 
-      await AgentforceService.launchConversation();
+      // Enable message forwarding to receive events in React Native
+      await AgentforceService.enableMessageForwarding(true);
+
+      // Navigate to custom chat UI instead of native overlay
+      navigation.navigate('CustomChat');
 
       const contextVars = getContextVariables();
       if (contextVars.length > 0) {

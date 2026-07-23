@@ -660,7 +660,7 @@ class AgentforceService {
 
     try {
       const result = await AgentforceModule.launchConversation();
-      console.log('[AgentforceService] Conversation launched successfully');
+      console.log('[AgentforceService] Conversation launched successfully', result);
       return result?.success ?? true;
     } catch (error) {
       console.error('[AgentforceService] Failed to launch conversation:', error);
@@ -1025,6 +1025,56 @@ class AgentforceService {
       return (fields as HiddenPreChatFields) ?? {};
     } catch {
       return {};
+    }
+  }
+
+  /**
+   * Enable or disable forwarding of message events to React Native.
+   *
+   * When enabled, the SDK will emit the following events:
+   * - `onUtteranceSent`: User sends a message
+   * - `onAgentResponse`: Agent sends a message
+   * - `onAgentSwitch`: User switches to a different agent
+   * - `onModifyUtteranceRequest`: Utterance modification hook (if using custom UI)
+   *
+   * @param enabled - True to enable message forwarding, false to disable
+   * @returns Promise<boolean> indicating success
+   *
+   * @example
+   * ```typescript
+   * // Enable message forwarding to build custom chat UI
+   * await AgentforceService.enableMessageForwarding(true);
+   *
+   * // Set up UI delegate to receive messages
+   * AgentforceService.setUIDelegate({
+   *   onUtteranceSent(event) {
+   *     console.log('User sent:', event.utterance);
+   *     // Update your custom chat UI with user message
+   *   },
+   *   onAgentResponse(event) {
+   *     console.log('Agent responded:', event.message);
+   *     // Update your custom chat UI with agent message
+   *   },
+   * });
+   * ```
+   */
+  async enableMessageForwarding(enabled: boolean): Promise<boolean> {
+    if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
+      return false;
+    }
+
+    if (!AgentforceModule?.enableMessageForwarding) {
+      console.warn('[AgentforceService] enableMessageForwarding not available on native module');
+      return false;
+    }
+
+    try {
+      const result = await AgentforceModule.enableMessageForwarding(enabled);
+      console.log(`[AgentforceService] Message forwarding ${enabled ? 'enabled' : 'disabled'}`);
+      return result === true;
+    } catch (error) {
+      console.error('[AgentforceService] Failed to set message forwarding:', error);
+      return false;
     }
   }
 
