@@ -28,11 +28,13 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import HomeScreen from './src/screens/HomeScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import FeatureFlagsScreen from './src/screens/FeatureFlagsScreen';
+import AgentforceChatScreen from './src/screens/AgentForceScreen';
 
 export type RootStackParamList = {
   Home: undefined;
   Settings: { tab?: 'service' | 'employee' | 'features' };
   FeatureFlags: undefined;
+  Chat: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -70,6 +72,13 @@ const App = (): JSX.Element => {
           component={FeatureFlagsScreen}
           options={{
             title: 'Feature Flags',
+          }}
+        />
+        <Stack.Screen
+          name="Chat"
+          component={AgentforceChatScreen}
+          options={{
+            title: 'Agentforce Chat',
           }}
         />
       </Stack.Navigator>

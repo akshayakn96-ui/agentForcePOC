@@ -134,14 +134,38 @@ class BridgeUIDelegate(private val reactContext: ReactContext) : AgentforceUIDel
         agentforceMessage: AgentforceMessage,
         conversation: AgentConversation
     ) {
-        if (!forwardingEnabled) return
+        val messageText = agentforceMessage.message ?: agentforceMessage.text ?: ""
+        Log.d(TAG, "didReceiveResponse triggered! id=${agentforceMessage.id}, text=$messageText, type=${agentforceMessage.type}")
+
+        if (!forwardingEnabled) {
+            Log.w(TAG, "Forwarding is disabled, but received message from SDK. Enable via enableUIDelegateForwarding(true)")
+            // We'll emit anyway for debugging if the session is headless
+        }
 
         val params = Arguments.createMap().apply {
             putString("responseId", agentforceMessage.id)
-            putString("message", agentforceMessage.message ?: agentforceMessage.text)
+            putString("message", messageText)
             putString("type", agentforceMessage.type ?: "agent")
             putString("conversationId", getConversationId(conversation))
             putString("timestamp", formatTimestamp(agentforceMessage.timeStamp))
+
+            // Extra fields for rich content
+            agentforceMessage.lightningType?.let { putString("lightningType", it) }
+            agentforceMessage.messageType?.let { putString("messageType", it) }
+            putBoolean("isPartial", agentforceMessage.isPartial)
+            
+            // Serialize choices if present
+            agentforceMessage.choices?.let { choices ->
+                val choicesArray = Arguments.createArray()
+                for (choice in choices) {
+                    val choiceMap = Arguments.createMap().apply {
+                        putString("label", choice.label)
+                        putString("alias", choice.alias)
+                    }
+                    choicesArray.pushMap(choiceMap)
+                }
+                putArray("choices", choicesArray)
+            }
         }
 
         reactContext

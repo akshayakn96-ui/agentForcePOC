@@ -705,6 +705,56 @@ class AgentforceService {
   }
 
   /**
+   * Start the Agentforce conversation session without showing any UI.
+   * Useful for building a custom React Native chat UI.
+   *
+   * @returns Promise<boolean> indicating success
+   */
+  async startSession(): Promise<boolean> {
+    if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
+      return false;
+    }
+
+    if (!AgentforceModule?.startSession) {
+      return false;
+    }
+
+    try {
+      const result = await AgentforceModule.startSession();
+      return result?.success ?? true;
+    } catch (error) {
+      console.error('[AgentforceService] Failed to start session:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send a text message to the agent headlessly.
+   * Used for custom React Native chat UIs.
+   *
+   * @param text - The message text to send
+   * @returns Promise<boolean> indicating success
+   */
+  async sendMessage(text: string): Promise<boolean> {
+    if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
+      return false;
+    }
+
+    if (!AgentforceModule?.sendMessage) {
+      console.warn('[AgentforceService] sendMessage not available on native module');
+      return false;
+    }
+
+    try {
+      await AgentforceModule.sendMessage(text);
+      return true;
+    } catch (error) {
+      console.error('[AgentforceService] Failed to send message:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if Agentforce SDK is configured and ready.
    *
    * @returns Promise<boolean> indicating if configured

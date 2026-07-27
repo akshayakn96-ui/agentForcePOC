@@ -119,6 +119,19 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
         val type = config.getString("type")
         
         Log.d(TAG, "configure() called with type: $type")
+
+        // Handle optional branding customization
+        if (config.hasKey("branding")) {
+            val brandingMap = config.getMap("branding")
+            val colors = mutableMapOf<String, String>()
+            brandingMap?.keySetIterator()?.let { iterator ->
+                while (iterator.hasNextKey()) {
+                    val key = iterator.nextKey()
+                    brandingMap.getString(key)?.let { colors[key] = it }
+                }
+            }
+            ChatBrand.updateColors(colors)
+        }
         
         when (type) {
             "service" -> configureServiceAgent(config, promise)
@@ -947,6 +960,82 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
     // endregion
 
 
+    /**
+     * Start the Agentforce conversation session without showing any UI.
+     * Useful for building a custom React Native chat UI.
+     */
+    @ReactMethod
+    fun startSession(promise: Promise) {
+        Log.d(TAG, "startSession() called")
+
+        if (!AgentforceClientHolder.isConfigured && viewModel?.isConfigured?.value != true) {
+            promise.reject("NOT_CONFIGURED", "Agent not configured. Call configure() first.")
+            return
+        }
+
+        scope.launch(Dispatchers.Main) {
+            try {
+                if (AgentforceClientHolder.currentConversation == null) {
+                    if (!createConversation(promise, "SESSION_ERROR")) return@launch
+                }
+                
+                val conversation = AgentforceClientHolder.currentConversation
+                if (conversation == null) {
+                    promise.reject("SESSION_ERROR", "Failed to create conversation")
+                    return@launch
+                }
+
+                // Ensure the conversation is actually started
+                conversation.startSession()
+
+                // If pre-chat is required and we have hidden fields, submit them automatically
+                if (conversation.isPreChatRequired()) {
+                    val fields = bridgeHiddenPreChat.getFields()
+                    if (fields.isNotEmpty()) {
+                        Log.d(TAG, "Auto-submitting ${fields.size} hidden pre-chat fields for headless session")
+                        conversation.submitPreChatForm(fields, "hidden_prechat_form")
+                    }
+                }
+
+                promise.resolve(Arguments.createMap().apply {
+                    putBoolean("success", true)
+                })
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start session", e)
+                promise.reject("SESSION_ERROR", "Failed to start session: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Send a text message to the agent.
+     */
+    @ReactMethod
+    fun sendMessage(text: String, promise: Promise) {
+        scope.launch(Dispatchers.Main) {
+            try {
+                // Get or create conversation inside the coroutine
+                var conversation = AgentforceClientHolder.currentConversation
+
+                if (conversation == null) {
+                    if (!createConversation(promise, "SEND_ERROR")) return@launch
+                    conversation = AgentforceClientHolder.currentConversation
+                }
+
+                if (conversation == null) {
+                    promise.reject("NO_CONVERSATION", "No active conversation. Call configure() first.")
+                    return@launch
+                }
+
+                conversation.sendUtterance(text, null)
+                promise.resolve(true)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to send message", e)
+                promise.reject("SEND_ERROR", "Failed to send message: ${e.message}", e)
+            }
+        }
+    }
+
     @ReactMethod
     fun addListener(eventName: String) {
         // Required for RN event emitter
@@ -969,12 +1058,23 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
      *         (in which case the [promise] has already been rejected).
      */
     private fun createConversation(promise: Promise, errorCode: String): Boolean {
-        val client = AgentforceClientHolder.agentforceClient ?: return true
+        val client = AgentforceClientHolder.agentforceClient
+        if (client == null) {
+            promise.reject(errorCode, "AgentforceClient not initialized. Call configure() first.")
+            return false
+        }
         return try {
-            val agentIdParam = AgentforceClientHolder.agentId?.takeIf { it.isNotBlank() }
-            val conversation = client.startAgentforceConversation(agentId = agentIdParam)
+            val conversation = if (AgentforceClientHolder.isServiceAgent) {
+                val esName = AgentforceClientHolder.esDeveloperName
+                Log.d(TAG, "Creating Service Agent conversation (esName=$esName)")
+                client.startAgentforceServiceConversation(esDeveloperName = esName, sessionId = null)
+            } else {
+                val agentIdParam = AgentforceClientHolder.agentId?.takeIf { it.isNotBlank() }
+                Log.d(TAG, "Creating Employee Agent conversation (agentId=${agentIdParam ?: "null/multi-agent"})")
+                client.startAgentforceConversation(agentId = agentIdParam, sessionId = null)
+            }
+            
             AgentforceClientHolder.setConversation(conversation)
-            Log.d(TAG, "Conversation created in module (agentId=${agentIdParam ?: "null/multi-agent"})")
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create conversation", e)
