@@ -121,8 +121,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           componentMap: {
             'copilot/richText': 'CustomAgentforceView',
             'copilot/markdown': 'CustomAgentforceView',
+            // Register choice/button component types
+            'copilot/choices': 'CustomChoicesView',
+            'copilot/actions': 'CustomChoicesView',
+            'copilot/buttons': 'CustomChoicesView',
+            'copilot/list': 'CustomChoicesView',
           },
         });
+        console.log('[HomeScreen] ViewProvider registered with choice component types');
       }
     } catch (error) {
       console.warn('Failed to register view provider:', error);

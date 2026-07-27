@@ -8,20 +8,90 @@ import ChatInput from '../components/ChatInputs';
 export default function AgentforceChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
-  const listRef = useRef<FlatList>(null);
+  const [isSending, setIsSending] = useState(false);
+  const listRef = useRef<FlatList<ChatMessage>>(null);
+  const didInitializeRef = useRef(false);
+  const didStartSessionRef = useRef(false);
+  const recentUserMessagesRef = useRef<Map<string, number>>(new Map());
+  const recentAgentMessagesRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
+    if (didInitializeRef.current) {
+      return;
+    }
+    didInitializeRef.current = true;
+
+    // ViewProviderDelegate is registered globally in HomeScreen for choice components
+    // Here we just set up the UIDelegate for message events
+
+    AgentforceService.setUIDelegate({
+      onUtteranceSent(event) {
+        const text = event.utterance?.trim();
+        if (!text) {
+          setIsSending(false);
+          return;
+        }
+
+        const signature = `${text}`;
+        const now = Date.now();
+        const previous = recentUserMessagesRef.current.get(signature);
+        // Dedup: skip if same message sent within 30 seconds
+        if (previous && now - previous < 30000) {
+          setIsSending(false);
+          return;
+        }
+
+        recentUserMessagesRef.current.set(signature, now);
+        addMessage(text, 'user');
+        setIsSending(false);
+      },
+
+      onAgentResponse(event) {
+        const agentEvent = event as any;
+
+        // Skip end-user message echoes
+        if (agentEvent.lightningType === 'copilot/endUserMessage') {
+          return;
+        }
+
+        // Skip partial responses
+        if (agentEvent.isPartial) {
+          return;
+        }
+
+        const text = agentEvent.message ?? '';
+        if (!text) {
+          return;
+        }
+
+        const messageSignature = text;
+        const now = Date.now();
+        const previous = recentAgentMessagesRef.current.get(messageSignature);
+        // Dedup: skip if same message received within 30 seconds
+        if (previous && now - previous < 30000) {
+          return;
+        }
+        recentAgentMessagesRef.current.set(messageSignature, now);
+
+        // Customize response text
+        let displayText = text;
+        if (displayText.includes('Digital Assistant')) {
+          displayText = displayText.replace('Digital Assistant', 'AI Support');
+        }
+
+        addMessage(displayText, 'agent');
+        // Note: Choice components are handled by CustomChoicesView via ViewProvider
+      },
+
+      onAgentSwitch(event) {
+        console.log('Agent switched');
+      },
+    });
+
     const setup = async () => {
       try {
-        // 1. Ensure Agentforce is configured.
-        // If the user came here directly, we might need to re-run config logic.
         const info = await AgentforceService.getConfigurationInfo();
         if (!info.configured) {
-          console.log('Agentforce not configured, attempting auto-config...');
-          // Add a message to UI
-          addMessage('Connecting to Agentforce...', 'agent');
-
-          // Try to get saved config and apply it
           const config = await AgentforceService.getConfiguration();
           if (config) {
             await AgentforceService.configure({
@@ -35,7 +105,6 @@ export default function AgentforceChatScreen() {
           }
         }
 
-        // 2. Register your hidden fields FIRST
         const dummyPreChatFields = {
           First_Name: 'Swetha',
           Last_Name: 'Patel',
@@ -43,12 +112,13 @@ export default function AgentforceChatScreen() {
         };
         await AgentforceService.registerHiddenPreChatFields(dummyPreChatFields);
 
-        // 3. Start session headlessly
-        await AgentforceService.startSession();
-        console.log('Headless session started');
+        if (!didStartSessionRef.current) {
+          didStartSessionRef.current = true;
+          await AgentforceService.startSession();
+        }
         setIsInitializing(false);
       } catch (err) {
-        console.error('Failed to initialize custom chat:', err);
+        console.error('Failed to initialize chat:', err);
         addMessage('Failed to connect to agent.', 'agent');
         setIsInitializing(false);
       }
@@ -56,65 +126,16 @@ export default function AgentforceChatScreen() {
 
     setup();
 
-    AgentforceService.setUIDelegate({
-      // User message
-      onUtteranceSent(event) {
-        console.log('User Utterance Sent:', JSON.stringify(event, null, 2));
-      },
-
-      // Agent response
-      onAgentResponse(event) {
-        console.log('--- Agent Response Received (Delegate) ---');
-        console.log(JSON.stringify(event, null, 2));
-
-        if (event.lightningType === 'copilot/endUserMessage') {
-          return; // Ignore user messages echoed by the SDK
-        }
-
-        // Skip partial/streaming messages if you only want final text
-        if (event.isPartial) return;
-
-        // 1. Extract text
-        let text = event.message || '';
-
-        // 2. Extract choices (buttons)
-        let choicesList: string[] = [];
-        if (event.choices && Array.isArray(event.choices)) {
-          choicesList = event.choices.map((c: any) => c.label).filter(Boolean);
-        }
-
-        // 3. Customize and Add to UI
-        if (text || choicesList.length > 0) {
-          let customizedText = text;
-
-          // Apply your custom string replacements
-          if (customizedText.includes('Swetha')) {
-            customizedText = customizedText.replace('Digital Assistant', 'AI Support');
-          }
-
-          // If there are buttons, append them visually for now
-          if (choicesList.length > 0) {
-            const buttonsText = choicesList.map(label => `[${label}]`).join('  ');
-            customizedText = customizedText ? `${customizedText}\n\n${buttonsText}` : buttonsText;
-          }
-
-          addMessage(customizedText, 'agent');
-        }
-      },
-
-      onAgentSwitch(event) {
-        console.log('Agent Switched Event:', JSON.stringify(event, null, 2));
-      },
-    });
-
     return () => {
-      // Don't clear if you want to keep receiving events while navigating back
-      // AgentforceService.clearUIDelegate();
+      setMessages([]);
+      didStartSessionRef.current = false;
     };
   }, []);
 
   function addMessage(text: string, sender: 'user' | 'agent') {
-    if (!text) return;
+    if (!text) {
+      return;
+    }
 
     setMessages(prev => [
       ...prev,
@@ -134,19 +155,21 @@ export default function AgentforceChatScreen() {
   }
 
   const onSend = async (text: string) => {
-    if (!text.trim() || isInitializing) return;
+    const trimmedText = text.trim();
+    if (!trimmedText || isInitializing || isSending) {
+      return;
+    }
 
-    console.log('Sending message headlessly:', text);
-
-    // 1. Add to local UI immediately
-    addMessage(text, 'user');
-
-    // 2. Send to Agentforce headlessly
     try {
-      await AgentforceService.sendMessage(text);
+      setIsSending(true);
+      // Show message immediately (optimistic update)
+      addMessage(trimmedText, 'user');
+      await AgentforceService.sendMessage(trimmedText);
+      setIsSending(false);
     } catch (error) {
-      console.error('Failed to send message to Agentforce:', error);
+      console.error('Failed to send message:', error);
       addMessage('Error: Failed to send message.', 'agent');
+      setIsSending(false);
     }
   };
 
@@ -155,8 +178,12 @@ export default function AgentforceChatScreen() {
       <FlatList
         ref={listRef}
         data={messages}
+        style={styles.list}
+        contentContainerStyle={messages.length === 0 ? styles.emptyListContent : styles.listContent}
+        extraData={messages}
         renderItem={({ item }) => <ChatBubble item={item} />}
         keyExtractor={item => item.id}
+        ListEmptyComponent={isInitializing ? null : <></>}
       />
 
       <ChatInput onSend={onSend} />
@@ -168,5 +195,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F4F6F8',
+  },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    paddingVertical: 12,
+  },
+  emptyListContent: {
+    flexGrow: 1,
   },
 });

@@ -49,6 +49,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -251,8 +252,8 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
                 client.init(
                     agentforceMode = sdkMode,
                     application = reactApplicationContext.applicationContext as Application,
-                    coroutineScope = scope,
-                    hiddenPreChatFieldDelegate = bridgeHiddenPreChat
+                    hiddenPreChatFieldDelegate = bridgeHiddenPreChat,
+                    coroutineScope = scope
                 )
                 
                 AgentforceClientHolder.setClient(client)
@@ -1056,6 +1057,7 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
     /**
      * Start the Agentforce conversation session without showing any UI.
      * Useful for building a custom React Native chat UI.
+     * Bootstrap messages will be emitted through the delegate.
      */
     @ReactMethod
     fun startSession(promise: Promise) {
@@ -1066,8 +1068,15 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
             return
         }
 
+        val activity = currentActivity
+        if (activity == null) {
+            promise.reject("SESSION_ERROR", "Activity not available")
+            return
+        }
+
         scope.launch(Dispatchers.Main) {
             try {
+                // Create conversation if it doesn't exist
                 if (AgentforceClientHolder.currentConversation == null) {
                     if (!createConversation(promise, "SESSION_ERROR")) return@launch
                 }
@@ -1078,18 +1087,24 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
                     return@launch
                 }
 
-                // Ensure the conversation is actually started
-                conversation.startSession()
-
+                // Show overlay invisibly to trigger bootstrap - SDK needs UI context for bootstrap
+                Log.d(TAG, "Starting session with invisible overlay for bootstrap")
+                AgentforceConversationOverlay.show(activity)
+                // Small delay to allow bootstrap to start, then hide the overlay
+                // The conversation and delegate stay alive even after hiding
+                delay(100)
+                AgentforceConversationOverlay.hide()
+                
                 // If pre-chat is required and we have hidden fields, submit them automatically
                 if (conversation.isPreChatRequired()) {
                     val fields = bridgeHiddenPreChat.getFields()
                     if (fields.isNotEmpty()) {
-                        Log.d(TAG, "Auto-submitting ${fields.size} hidden pre-chat fields for headless session")
+                        Log.d(TAG, "Auto-submitting ${fields.size} hidden pre-chat fields")
                         conversation.submitPreChatForm(fields, "hidden_prechat_form")
                     }
                 }
 
+                Log.d(TAG, "Session started - bootstrap messages will be delivered through delegate")
                 promise.resolve(Arguments.createMap().apply {
                     putBoolean("success", true)
                 })

@@ -28,8 +28,10 @@ import 'react-native-gesture-handler';
 import { AppRegistry } from 'react-native';
 import App from './App';
 import CustomAgentforceView from './src/components/CustomAgentforceView';
+import CustomChoicesView from './src/components/CustomChoicesView';
 
 AppRegistry.registerComponent('ReactAgentforce', () => App);
 
-// Register the custom view provider component so native can render it via RCTRootView/ReactRootView
+// Register custom view provider components so native can render them via RCTRootView/ReactRootView
 AppRegistry.registerComponent('CustomAgentforceView', () => CustomAgentforceView);
+AppRegistry.registerComponent('CustomChoicesView', () => CustomChoicesView);
