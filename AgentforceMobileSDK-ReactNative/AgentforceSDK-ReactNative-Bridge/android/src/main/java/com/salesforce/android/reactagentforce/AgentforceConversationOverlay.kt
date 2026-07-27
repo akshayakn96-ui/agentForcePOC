@@ -40,7 +40,11 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import androidx.compose.runtime.CompositionLocalProvider
+import com.salesforce.android.agentforcesdk.components.theme.AgentforceColorPalette
+import com.salesforce.android.agentforcesdk.components.theme.AgentforceColorToken
 import com.salesforce.android.agentforcesdk.components.theme.LocalAgentforceTheme
+import com.salesforce.android.agentforcesdk.components.theme.createCustomAgentforceThemeManager
 
 /**
  * Manages the Agentforce conversation UI as an overlay on the current Activity.
@@ -200,17 +204,30 @@ private fun ConversationOverlayContent(onClose: () -> Unit) {
     // the message bubbles, welcome message, and composer inside this container.
     val surfaceColor = ChatBrand.ChatSurface
 
-    MaterialTheme {
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .onSizeChanged { heightPx = it.height }
-                .graphicsLayer { this.translationY = translationY },
-            color = surfaceColor
-        ) {
+    // Custom theme overrides based on ChatBrand
+    val customColors = AgentforceColorPalette(
+        mapOf(
+            AgentforceColorToken.AgentAvatarBackground.key to ChatBrand.AgentAvatarBackground,
+            AgentforceColorToken.AgentAvatarIconTint.key to ChatBrand.AgentAvatarIconTint,
+            AgentforceColorToken.AgentMessageTextColor.key to ChatBrand.AgentMessageText,
+            AgentforceColorToken.ChatBackground.key to ChatBrand.ChatSurface
+        )
+    )
+    val customTheme = createCustomAgentforceThemeManager(
+        lightColors = customColors,
+        darkColors = customColors
+    )
+
+    CompositionLocalProvider(LocalAgentforceTheme provides customTheme) {
+        MaterialTheme {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .onSizeChanged { heightPx = it.height }
+                    .graphicsLayer { this.translationY = translationY }
+                    // Background before the insets, so the padded strips aren't transparent
+                    // (host screen bleed-through); after graphicsLayer so it slides on hide.
+                    .background(surfaceColor)
                     .statusBarsPadding()
                     .navigationBarsPadding()
                     .imePadding()

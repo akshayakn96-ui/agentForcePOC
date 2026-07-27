@@ -47,7 +47,6 @@ import {
 } from 'react-native-agentforce';
 import { UI_FEATURES } from '../config/AppConfig';
 import { getContextVariables } from '../store/ContextVariablesStore';
-import AgentforceChatScreen from './AgentForceScreen';
 
 interface HomeScreenProps {
   navigation: any;
@@ -189,6 +188,14 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             organizationId: config.organizationId,
             esDeveloperName: config.esDeveloperName,
             featureFlags,
+            branding: {
+              header: '#7B1FA2',
+              headerContent: '#FFFFFF',
+              agentAvatarBackground: '#7B1FA2',
+              agentAvatarIconTint: '#FFFFFF',
+              agentMessageText: '#212529',
+              chatSurface: '#F3E5F5',
+            },
           });
         }
       }
@@ -238,9 +245,30 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
             agentLabel: '', // optional: set a custom name to display in the chat header (overrides the server agent label)
             accessToken: creds.accessToken,
             featureFlags,
+            branding: {
+              header: '#0176D3',
+              headerContent: '#FFFFFF',
+              agentAvatarBackground: '#0176D3',
+              agentAvatarIconTint: '#FFFFFF',
+              agentMessageText: '#212529',
+              chatSurface: '#E7F3FF',
+            },
           }
         : // optional: set agentLabel to a custom name to display in the chat header (overrides the server agent label)
-          { ...EMPLOYEE_AGENT_CONFIG, agentId: agentId, agentLabel: '', featureFlags };
+          {
+            ...EMPLOYEE_AGENT_CONFIG,
+            agentId: agentId,
+            agentLabel: '',
+            featureFlags,
+            branding: {
+              header: '#0176D3',
+              headerContent: '#FFFFFF',
+              agentAvatarBackground: '#0176D3',
+              agentAvatarIconTint: '#FFFFFF',
+              agentMessageText: '#212529',
+              chatSurface: '#E7F3FF',
+            },
+          };
       await AgentforceService.configure(config);
 
       // Enable message forwarding to receive events in React Native
@@ -292,6 +320,16 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
         )}
 
         <View style={styles.buttonsContainer}>
+          <TouchableOpacity
+            style={[styles.launchButton, styles.customUiButton]}
+            onPress={() => navigation.navigate('Chat')}>
+            <View style={styles.launchButtonContent}>
+              <Text style={styles.launchButtonTitle}>Custom Chat UI</Text>
+              <Text style={styles.launchButtonSubtitle}>Headless Agentforce Integration</Text>
+            </View>
+            <Text style={styles.launchButtonArrow}>›</Text>
+          </TouchableOpacity>
+
           {UI_FEATURES.SHOW_SERVICE_AGENT && (
             <TouchableOpacity
               style={[
@@ -351,7 +389,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
           Running on {Platform.OS === 'ios' ? 'iOS' : 'Android'}
         </Text>
       </ScrollView>
-      <AgentforceChatScreen />
     </View>
   );
 };
@@ -433,6 +470,11 @@ const styles = StyleSheet.create({
   serviceAgentButton: {
     borderLeftWidth: 4,
     borderLeftColor: '#7B1FA2',
+  },
+  customUiButton: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF5722',
+    marginBottom: 8,
   },
   employeeAgentButton: {
     borderLeftWidth: 4,

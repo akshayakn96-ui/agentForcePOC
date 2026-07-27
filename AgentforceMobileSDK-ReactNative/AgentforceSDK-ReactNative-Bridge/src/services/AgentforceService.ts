@@ -705,61 +705,49 @@ class AgentforceService {
   }
 
   /**
-   * Start a new conversation session without presenting the native SDK chat UI.
+   * Start the Agentforce conversation session without showing any UI.
+   * Useful for building a custom React Native chat UI.
    *
-   * Use this for custom React Native chat screens that need an active
-   * conversation for UI delegate event forwarding.
+   * @returns Promise<boolean> indicating success
    */
-  async startConversationSession(): Promise<boolean> {
+  async startSession(): Promise<boolean> {
     if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
-      console.warn('Agentforce only supported on Android and iOS');
       return false;
     }
 
-    if (!AgentforceModule) {
-      console.error('AgentforceModule native module not found');
-      return false;
-    }
-
-    if (!AgentforceModule.startConversationSession) {
-      console.warn('[AgentforceService] startConversationSession not available on native module');
+    if (!AgentforceModule?.startSession) {
       return false;
     }
 
     try {
-      const result = await AgentforceModule.startConversationSession();
-      console.log('[AgentforceService] Conversation session started successfully', result);
+      const result = await AgentforceModule.startSession();
       return result?.success ?? true;
     } catch (error) {
-      console.error('[AgentforceService] Failed to start conversation session:', error);
+      console.error('[AgentforceService] Failed to start session:', error);
       throw error;
     }
   }
 
   /**
-   * Send a text message to the active conversation.
+   * Send a text message to the agent headlessly.
+   * Used for custom React Native chat UIs.
    *
-   * In custom RN chat UIs, call this after startConversationSession().
+   * @param text - The message text to send
+   * @returns Promise<boolean> indicating success
    */
   async sendMessage(text: string): Promise<boolean> {
     if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
-      console.warn('Agentforce only supported on Android and iOS');
       return false;
     }
 
-    if (!AgentforceModule) {
-      console.error('AgentforceModule native module not found');
-      return false;
-    }
-
-    if (!AgentforceModule.sendMessage) {
+    if (!AgentforceModule?.sendMessage) {
       console.warn('[AgentforceService] sendMessage not available on native module');
       return false;
     }
 
     try {
-      const result = await AgentforceModule.sendMessage(text);
-      return result?.success ?? true;
+      await AgentforceModule.sendMessage(text);
+      return true;
     } catch (error) {
       console.error('[AgentforceService] Failed to send message:', error);
       throw error;

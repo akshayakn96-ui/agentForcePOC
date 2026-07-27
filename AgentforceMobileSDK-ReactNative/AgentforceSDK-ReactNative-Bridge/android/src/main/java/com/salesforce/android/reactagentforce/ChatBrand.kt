@@ -13,12 +13,40 @@ import androidx.compose.ui.graphics.Color
  * in [BridgeTopAppBarBuilder] with the final logo asset when it is available.
  */
 object ChatBrand {
-    val Header = Color(0xFFF05637)
-    val HeaderContent = Color.White
-    val ChatSurface = Color(0xFFFFED4E)
-    val MarkBackground = Color(0xFF784944)
-    val Accent = Color(0xFFF05637)
+    var Header = Color(0xFFF05637)
+    var HeaderContent = Color.White
+    var ChatSurface = Color(0xFFFFF7F5)
+    var MarkBackground = Color(0xFF784944)
+    var Accent = Color(0xFFF05637)
+
+    // SDK-specific overrides
+    var AgentMessageText = Color.Black
+    var AgentAvatarBackground = Color(0xFF784944)
+    var AgentAvatarIconTint = Color.White
 
     const val PrimaryName = "AAA"
     const val SecondaryName = "ACG"
+
+    /**
+     * Update branding colors from a map of hex strings.
+     */
+    fun updateColors(colors: Map<String, String>) {
+        colors["header"]?.let { Header = parseHex(it) }
+        colors["headerContent"]?.let { HeaderContent = parseHex(it) }
+        colors["chatSurface"]?.let { ChatSurface = parseHex(it) }
+        colors["markBackground"]?.let { MarkBackground = parseHex(it) }
+        colors["accent"]?.let { Accent = parseHex(it) }
+        
+        colors["agentMessageText"]?.let { AgentMessageText = parseHex(it) }
+        colors["agentAvatarBackground"]?.let { AgentAvatarBackground = parseHex(it) }
+        colors["agentAvatarIconTint"]?.let { AgentAvatarIconTint = parseHex(it) }
+    }
+
+    private fun parseHex(hex: String): Color {
+        return try {
+            Color(android.graphics.Color.parseColor(hex))
+        } catch (e: Exception) {
+            Color.Unspecified
+        }
+    }
 }

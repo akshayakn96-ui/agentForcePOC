@@ -7,64 +7,115 @@ import ChatInput from '../components/ChatInputs';
 
 export default function AgentforceChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [_isSending, setIsSending] = useState(false);
-  const listRef = useRef<FlatList<ChatMessage>>(null);
-  console.log('Rendering AgentforceChatScreen with messages:', messages);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    let isMounted = true;
+    const setup = async () => {
+      try {
+        // 1. Ensure Agentforce is configured.
+        // If the user came here directly, we might need to re-run config logic.
+        const info = await AgentforceService.getConfigurationInfo();
+        if (!info.configured) {
+          console.log('Agentforce not configured, attempting auto-config...');
+          // Add a message to UI
+          addMessage('Connecting to Agentforce...', 'agent');
 
-    const initializeChat = async () => {
-      await AgentforceService.enableMessageForwarding(true);
-
-      AgentforceService.setUIDelegate({
-        onUtteranceSent(event) {
-          if (!isMounted) {
+          // Try to get saved config and apply it
+          const config = await AgentforceService.getConfiguration();
+          if (config) {
+            await AgentforceService.configure({
+              ...config,
+              type: 'service',
+            });
+          } else {
+            addMessage('Error: Agent not configured. Please go to Settings first.', 'agent');
+            setIsInitializing(false);
             return;
           }
-          addMessage(event.utterance, 'user');
-          setIsSending(false);
-        },
+        }
 
-        onAgentResponse(event) {
-          if (!isMounted) {
-            return;
-          }
+        // 2. Register your hidden fields FIRST
+        const dummyPreChatFields = {
+          First_Name: 'Swetha',
+          Last_Name: 'Patel',
+          MembershipNumber: '4290472034292005',
+        };
+        await AgentforceService.registerHiddenPreChatFields(dummyPreChatFields);
 
-          console.log('Agent Response', event);
-          const messageText = event.message ?? '';
-          if (messageText.trim().length > 0) {
-            addMessage(messageText, 'agent');
-          }
-          setIsSending(false);
-        },
-
-        onAgentSwitch(event) {
-          console.log(event);
-        },
-      });
-
-      const configured = await AgentforceService.isConfigured();
-      if (configured) {
-        await AgentforceService.startConversationSession();
+        // 3. Start session headlessly
+        await AgentforceService.startSession();
+        console.log('Headless session started');
+        setIsInitializing(false);
+      } catch (err) {
+        console.error('Failed to initialize custom chat:', err);
+        addMessage('Failed to connect to agent.', 'agent');
+        setIsInitializing(false);
       }
     };
 
-    initializeChat().catch(error => {
-      console.error('Failed to initialize Agentforce chat screen:', error);
-      setIsSending(false);
+    setup();
+
+    AgentforceService.setUIDelegate({
+      // User message
+      onUtteranceSent(event) {
+        console.log('User Utterance Sent:', JSON.stringify(event, null, 2));
+      },
+
+      // Agent response
+      onAgentResponse(event) {
+        console.log('--- Agent Response Received (Delegate) ---');
+        console.log(JSON.stringify(event, null, 2));
+
+        if (event.lightningType === 'copilot/endUserMessage') {
+          return; // Ignore user messages echoed by the SDK
+        }
+
+        // Skip partial/streaming messages if you only want final text
+        if (event.isPartial) return;
+
+        // 1. Extract text
+        let text = event.message || '';
+
+        // 2. Extract choices (buttons)
+        let choicesList: string[] = [];
+        if (event.choices && Array.isArray(event.choices)) {
+          choicesList = event.choices.map((c: any) => c.label).filter(Boolean);
+        }
+
+        // 3. Customize and Add to UI
+        if (text || choicesList.length > 0) {
+          let customizedText = text;
+
+          // Apply your custom string replacements
+          if (customizedText.includes('Swetha')) {
+            customizedText = customizedText.replace('Digital Assistant', 'AI Support');
+          }
+
+          // If there are buttons, append them visually for now
+          if (choicesList.length > 0) {
+            const buttonsText = choicesList.map(label => `[${label}]`).join('  ');
+            customizedText = customizedText ? `${customizedText}\n\n${buttonsText}` : buttonsText;
+          }
+
+          addMessage(customizedText, 'agent');
+        }
+      },
+
+      onAgentSwitch(event) {
+        console.log('Agent Switched Event:', JSON.stringify(event, null, 2));
+      },
     });
 
     return () => {
-      isMounted = false;
-      AgentforceService.clearUIDelegate();
-      AgentforceService.enableMessageForwarding(false).catch(() => {
-        // no-op
-      });
+      // Don't clear if you want to keep receiving events while navigating back
+      // AgentforceService.clearUIDelegate();
     };
   }, []);
 
   function addMessage(text: string, sender: 'user' | 'agent') {
+    if (!text) return;
+
     setMessages(prev => [
       ...prev,
       {
@@ -83,18 +134,19 @@ export default function AgentforceChatScreen() {
   }
 
   const onSend = async (text: string) => {
-    const value = text.trim();
-    if (!value) {
-      return;
-    }
+    if (!text.trim() || isInitializing) return;
 
+    console.log('Sending message headlessly:', text);
+
+    // 1. Add to local UI immediately
+    addMessage(text, 'user');
+
+    // 2. Send to Agentforce headlessly
     try {
-      setIsSending(true);
-      await AgentforceService.sendMessage(value);
-      // User and agent bubbles are added from delegate callbacks.
+      await AgentforceService.sendMessage(text);
     } catch (error) {
-      console.error('Failed to send message:', error);
-      setIsSending(false);
+      console.error('Failed to send message to Agentforce:', error);
+      addMessage('Error: Failed to send message.', 'agent');
     }
   };
 
