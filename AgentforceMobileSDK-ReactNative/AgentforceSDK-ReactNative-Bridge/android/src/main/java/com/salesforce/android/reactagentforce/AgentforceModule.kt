@@ -238,6 +238,7 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
                 client.init(
                     agentforceMode = sdkMode,
                     application = reactApplicationContext.applicationContext as Application,
+                    coroutineScope = scope,
                     hiddenPreChatFieldDelegate = bridgeHiddenPreChat
                 )
                 
@@ -400,7 +401,8 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
                 val client = AgentforceClient()
                 client.init(
                     agentforceMode = sdkMode,
-                    application = reactApplicationContext.applicationContext as Application
+                    application = reactApplicationContext.applicationContext as Application,
+                    coroutineScope = scope
                 )
                 
                 AgentforceClientHolder.setClient(client)
@@ -554,13 +556,80 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
     }
 
     /**
-     * Send a text message to the conversation
+     * Start a new conversation session without showing the native overlay UI.
+     *
+     * This is intended for custom React Native chat experiences that still need
+     * an active SDK conversation for delegate event forwarding.
      */
-    // Note: Direct message sending via conversation object is not exposed by the SDK
-    // Messages are sent through the native Agentforce UI overlay.
-    // The message API provides receiving/listening capabilities via:
-    // - enableMessageForwarding() to control event delivery
-    // - setUIDelegate() to receive onUtteranceSent and onAgentResponse events
+    @ReactMethod
+    fun startConversationSession(promise: Promise) {
+        Log.d(TAG, "startConversationSession() called")
+
+        val isConfiguredUnified = credentialProvider.isConfigured
+        val isConfiguredLegacy = viewModel?.isConfigured?.value == true
+
+        if (!isConfiguredUnified && !isConfiguredLegacy) {
+            promise.reject("NOT_CONFIGURED", "Agent not configured. Call configure() first.")
+            return
+        }
+
+        scope.launch(Dispatchers.Main) {
+            try {
+                // Legacy path may need SDK init before conversation creation.
+                if (!AgentforceClientHolder.isConfigured && isConfiguredLegacy) {
+                    viewModel?.initializeAgentforce()
+                }
+
+                // Ensure any existing native overlay is not visible for custom UI.
+                AgentforceConversationOverlay.destroy()
+
+                AgentforceClientHolder.clearConversation()
+                viewModel?.closeConversation()
+
+                if (!createConversation(promise, "START_SESSION_ERROR")) return@launch
+
+                promise.resolve(Arguments.createMap().apply {
+                    putBoolean("success", true)
+                })
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to start conversation session", e)
+                promise.reject("START_SESSION_ERROR", "Failed to start conversation: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Send a text message to the active conversation.
+     *
+     * This enables custom React Native chat UIs to send utterances without
+     * rendering the native conversation overlay.
+     */
+    @ReactMethod
+    fun sendMessage(text: String, promise: Promise) {
+        val utterance = text.trim()
+        if (utterance.isEmpty()) {
+            promise.reject("INVALID_INPUT", "Message text cannot be empty")
+            return
+        }
+
+        val conversation = AgentforceClientHolder.currentConversation
+        if (conversation == null) {
+            promise.reject("NO_CONVERSATION", "No active conversation. Start a conversation session first.")
+            return
+        }
+
+        scope.launch {
+            try {
+                conversation.sendUtterance(utterance, null)
+                promise.resolve(Arguments.createMap().apply {
+                    putBoolean("success", true)
+                })
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to send message", e)
+                promise.reject("SEND_MESSAGE_ERROR", "Failed to send message: ${e.message}", e)
+            }
+        }
+    }
 
     // endregion
 

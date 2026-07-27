@@ -8,7 +8,7 @@
  * 4. Build a custom chat UI
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -39,15 +39,10 @@ export default function CustomChatUIExample() {
   const [isLoading, setIsLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  useEffect(() => {
-    initializeChat();
-    return () => {
-      // Cleanup on unmount
-    };
-  }, []);
-
-  const initializeChat = async () => {
+  const initializeChat = useCallback(async () => {
     try {
+      setIsLoading(true);
+
       // Step 1: Enable message forwarding to receive events in React Native
       await AgentforceService.enableMessageForwarding(true);
       console.log('Message forwarding enabled');
@@ -95,27 +90,37 @@ export default function CustomChatUIExample() {
       AgentforceService.setUIDelegate(uiDelegate);
       console.log('UI delegate registered - ready to receive messages');
 
-      // Keep this screen purely custom React Native UI.
-      // Do not launch the native conversation overlay here.
-      setMessages([
-        {
-          id: 'welcome-1',
-          type: 'agent',
-          text: "Hi Swetha, I'm the Digital Assistant. I can help with questions about your Membership or Insurance.",
-          timestamp: new Date().toISOString(),
-        },
-        {
-          id: 'welcome-2',
-          type: 'agent',
-          text: 'Please select one to get started.',
-          timestamp: new Date().toISOString(),
-        },
-      ]);
+      // Step 3: Start a real Agentforce conversation so the initial agent
+      // messages are emitted by the SDK and forwarded to this UI.
+      const configured = await AgentforceService.isConfigured();
+      if (!configured) {
+        console.warn('Agentforce is not configured yet. Cannot start conversation.');
+        setIsLoading(false);
+        return;
+      }
+
+      await AgentforceService.startConversationSession();
+
+      // Conversation session is ready for delegate events.
+      // Do not keep the input locked while waiting for the first message.
+      setIsLoading(false);
     } catch (error) {
       console.error('Failed to initialize chat:', error);
+      setIsLoading(false);
     }
-  };
+  }, []);
 
+  useEffect(() => {
+    initializeChat();
+    return () => {
+      AgentforceService.clearUIDelegate();
+      AgentforceService.enableMessageForwarding(false).catch(() => {
+        // no-op cleanup
+      });
+    };
+  }, [initializeChat]);
+
+  console.log('Rendering CustomChatUIExample with messages:', messages);
   const addMessage = (message: ChatMessage) => {
     setMessages(prev => [...prev, message]);
     // Auto-scroll to latest message
@@ -131,18 +136,8 @@ export default function CustomChatUIExample() {
 
     try {
       setIsLoading(true);
-      // Note: Messages are sent through the native SDK UI overlay.
-      // The user types in the native input field, and the SDK emits onUtteranceSent event
-      // which triggers the handler above and displays it in the custom React Native UI.
-      // This input is just for display/demo purposes.
-      addMessage({
-        id: `demo-user-${Date.now()}`,
-        type: 'user',
-        text: inputText,
-        timestamp: new Date().toISOString(),
-      });
-      setInputText('');
-      setIsLoading(false);
+      await AgentforceService.sendMessage(inputText.trim());
+      // The UI bubble will be added by onUtteranceSent delegate callback.
     } catch (error) {
       console.error('Failed to handle message:', error);
       setIsLoading(false);

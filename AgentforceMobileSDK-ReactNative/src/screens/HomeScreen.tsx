@@ -93,28 +93,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     // Navigation delegate
     AgentforceService.setNavigationDelegate(agentforceNavigation);
 
-    // UI delegate
-    AgentforceService.setUIDelegate({
-      onAgentResponse(response) {
-        console.log('[Agentforce response]', JSON.stringify(response.message));
-        console.log('[Full response event]', JSON.stringify(response));
-        console.log('AI Response:', JSON.stringify(response, null, 2));
-      },
-
-      onUtteranceSent(event) {
-        console.log('[User message]', JSON.stringify(event.utterance));
-      },
-
-      onAgentSwitch(event) {
-        console.log('[Agent switched]', JSON.stringify(event));
-      },
-
-      async modifyUtterance(request) {
-        console.log('[Modify Utterance]', request);
-        return request.utterance;
-      },
-    });
-
     const init = async () => {
       await registerViewProviderIfEnabled();
       checkConfigurations();
@@ -125,7 +103,6 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     return () => {
       AgentforceService.clearLoggerDelegate();
       AgentforceService.clearNavigationDelegate();
-      AgentforceService.clearUIDelegate();
       AgentforceService.clearViewProviderDelegate();
     };
   }, []);

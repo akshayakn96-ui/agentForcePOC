@@ -530,6 +530,34 @@ class AgentforceModule: RCTEventEmitter {
         }
     }
 
+    /// Start a new conversation session without presenting the native chat UI.
+    ///
+    /// Useful for custom React Native chat screens that still need an active
+    /// Agentforce conversation to receive delegate events.
+    @objc
+    func startConversationSession(
+        _ resolve: @escaping RCTPromiseResolveBlock,
+        rejecter reject: @escaping RCTPromiseRejectBlock
+    ) {
+        Task { @MainActor in
+            guard !isInvalidated else { return }
+            do {
+                dismissConversation()
+                await closeCurrentConversation()
+
+                guard let client = agentforceClient, let mode = currentMode else {
+                    throw AgentConfigError.notConfigured
+                }
+
+                _ = try getOrCreateConversation(client: client, mode: mode, forceNew: true)
+                resolve(["success": true])
+            } catch {
+                print("[AgentforceModule] ❌ Start conversation session failed: \(error)")
+                reject("START_SESSION_ERROR", error.localizedDescription, error)
+            }
+        }
+    }
+
     // MARK: - Conversation Helpers
 
     private func getOrCreateConversation(client: AgentforceClient, mode: AgentMode, forceNew: Bool = false) throws -> AgentConversation {

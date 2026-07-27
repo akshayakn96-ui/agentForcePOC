@@ -7,29 +7,60 @@ import ChatInput from '../components/ChatInputs';
 
 export default function AgentforceChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const listRef = useRef<FlatList>(null);
+  const [_isSending, setIsSending] = useState(false);
+  const listRef = useRef<FlatList<ChatMessage>>(null);
+  console.log('Rendering AgentforceChatScreen with messages:', messages);
 
   useEffect(() => {
-    AgentforceService.setUIDelegate({
-      // User message
-      onUtteranceSent(event) {
-        addMessage(event.utterance, 'user');
-      },
+    let isMounted = true;
 
-      // Agent response
-      onAgentResponse(event) {
-        console.log('Agent Response', event);
+    const initializeChat = async () => {
+      await AgentforceService.enableMessageForwarding(true);
 
-        addMessage(event.message, 'agent');
-      },
+      AgentforceService.setUIDelegate({
+        onUtteranceSent(event) {
+          if (!isMounted) {
+            return;
+          }
+          addMessage(event.utterance, 'user');
+          setIsSending(false);
+        },
 
-      onAgentSwitch(event) {
-        console.log(event);
-      },
+        onAgentResponse(event) {
+          if (!isMounted) {
+            return;
+          }
+
+          console.log('Agent Response', event);
+          const messageText = event.message ?? '';
+          if (messageText.trim().length > 0) {
+            addMessage(messageText, 'agent');
+          }
+          setIsSending(false);
+        },
+
+        onAgentSwitch(event) {
+          console.log(event);
+        },
+      });
+
+      const configured = await AgentforceService.isConfigured();
+      if (configured) {
+        await AgentforceService.startConversationSession();
+      }
+    };
+
+    initializeChat().catch(error => {
+      console.error('Failed to initialize Agentforce chat screen:', error);
+      setIsSending(false);
     });
 
     return () => {
+      isMounted = false;
       AgentforceService.clearUIDelegate();
+      AgentforceService.enableMessageForwarding(false).catch(() => {
+        // no-op
+      });
     };
   }, []);
 
@@ -51,15 +82,20 @@ export default function AgentforceChatScreen() {
     }, 100);
   }
 
-  const onSend = (text: string) => {
-    /**
-     * Optional:
-     * If your native module exposes sendMessage()
-     *
-     * AgentforceService.sendMessage(text);
-     */
+  const onSend = async (text: string) => {
+    const value = text.trim();
+    if (!value) {
+      return;
+    }
 
-    addMessage(text, 'user');
+    try {
+      setIsSending(true);
+      await AgentforceService.sendMessage(value);
+      // User and agent bubbles are added from delegate callbacks.
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      setIsSending(false);
+    }
   };
 
   return (
