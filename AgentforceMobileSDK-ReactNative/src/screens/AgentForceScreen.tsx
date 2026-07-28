@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { SafeAreaView, FlatList, StyleSheet, View, Text, ActivityIndicator } from 'react-native';
+import { SafeAreaView, FlatList, StyleSheet, View, Text, ActivityIndicator, Image } from 'react-native';
 import { AgentforceService, AgentforceHeadlessObserver } from 'react-native-agentforce';
 import ChatBubble from '../components/ChatBubble';
 import { ChatMessage } from '../types/chatMessage';
@@ -128,12 +128,22 @@ export default function AgentforceChatScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Image
+        source={require('../../assets/images/AAA_logo.png')}
+        style={{ width: 150, height: 100, alignSelf: 'center'}}
+      />
+      <Text style={{ textAlign: 'center', padding: 10, color: '#6c757d' }}>Welcome to AAA Assistance</Text>
       {/* Invisible observer that triggers SDK events headlessly */}
-      {!isInitializing && <AgentforceHeadlessObserver style={{ width: 1, height: 1, position: 'absolute', opacity: 0 }} />}
+      {!isInitializing && (
+        <AgentforceHeadlessObserver
+          style={{ width: 1, height: 1, position: 'absolute', opacity: 0 }}
+        />
+      )}
 
       <FlatList
         ref={listRef}
         data={messages}
+        showsVerticalScrollIndicator={false}
         renderItem={({ item }) => <ChatBubble item={item} />}
         keyExtractor={item => item.id}
         ListFooterComponent={
