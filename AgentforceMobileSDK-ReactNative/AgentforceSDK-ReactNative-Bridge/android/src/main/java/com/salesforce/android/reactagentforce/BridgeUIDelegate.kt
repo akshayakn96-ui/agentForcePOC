@@ -40,6 +40,9 @@ class BridgeUIDelegate(private val reactContext: ReactContext) : AgentforceUIDel
     /** Pending modify-utterance requests awaiting JS responses. */
     private val pendingModifications = ConcurrentHashMap<String, CompletableDeferred<String>>()
 
+    /** Cache of processed message IDs to prevent duplicates. */
+    private val seenMessageIds = mutableSetOf<String>()
+
     /** Timeout for awaiting a modified utterance from JavaScript (milliseconds). */
     private val modifyUtteranceTimeoutMs: Long = 10_000
 
@@ -134,12 +137,22 @@ class BridgeUIDelegate(private val reactContext: ReactContext) : AgentforceUIDel
         agentforceMessage: AgentforceMessage,
         conversation: AgentConversation
     ) {
+        val rawId = agentforceMessage.id
+        // SDK often appends sequence numbers (_5, _6) to the same message. 
+        // We strip them to find the true unique ID of the content.
+        val baseId = rawId.substringBeforeLast("_")
+        
         val messageText = agentforceMessage.message ?: agentforceMessage.text ?: ""
-        Log.d(TAG, "didReceiveResponse triggered! id=${agentforceMessage.id}, text=$messageText, type=${agentforceMessage.type}")
+        
+        // Deduplicate by ID and content hash
+        val contentHash = "${baseId}_${messageText.hashCode()}"
+        if (seenMessageIds.contains(contentHash)) return
+        
+        Log.d(TAG, "didReceiveResponse triggered! id=$rawId, text=$messageText")
+        seenMessageIds.add(contentHash)
 
         if (!forwardingEnabled) {
-            Log.w(TAG, "Forwarding is disabled, but received message from SDK. Enable via enableUIDelegateForwarding(true)")
-            // We'll emit anyway for debugging if the session is headless
+            Log.w(TAG, "Forwarding is disabled, but received message from SDK.")
         }
 
         val params = Arguments.createMap().apply {
@@ -171,6 +184,11 @@ class BridgeUIDelegate(private val reactContext: ReactContext) : AgentforceUIDel
         reactContext
             .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             .emit("onAgentResponse", params)
+    }
+
+    /** Clear the message deduplication cache. */
+    fun clearCache() {
+        seenMessageIds.clear()
     }
 
     private fun formatTimestamp(epochMillis: Long): String =

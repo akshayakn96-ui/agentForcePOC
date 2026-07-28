@@ -33,19 +33,24 @@ class BridgeViewProvider(
 
     /**
      * Maps component definition strings to their React Native component names.
-     * Uses AtomicReference to swap the entire immutable map in one shot, so
-     * `canHandle` never sees a partially-updated (empty) map during registration.
      */
     private val componentMap: AtomicReference<Map<String, String>> = AtomicReference(emptyMap())
+
+    /**
+     * Tracks processed component IDs to prevent duplicate events in headless mode.
+     * Cleared when the session is reset.
+     */
+    private val processedComponentIds = mutableSetOf<String>()
 
     /** Register a 1:1 mapping of component types to React component names. */
     fun register(componentMap: Map<String, String>) {
         this.componentMap.set(componentMap.toMap())
     }
 
-    /** Clear all registrations */
+    /** Clear all registrations and history */
     fun reset() {
         componentMap.set(emptyMap())
+        processedComponentIds.clear()
     }
 
     val isRegistered: Boolean
@@ -72,11 +77,17 @@ class BridgeViewProvider(
 
         val text = extractText(view)
         
+        // Generate a stable ID based on content to prevent duplicates during re-renders
+        val contentHash = "${view.definition}_${text.hashCode()}_${view.properties.size}"
+        if (processedComponentIds.contains(contentHash)) return
+        
         // If we found text OR if there are nested components we might want to see in JS
         if (text.isEmpty() && view.regions.components?.components.isNullOrEmpty()) return
 
+        processedComponentIds.add(contentHash)
+
         val params = Arguments.createMap().apply {
-            putString("responseId", "comp_${System.currentTimeMillis()}")
+            putString("responseId", contentHash)
             putString("message", text)
             putString("type", "component")
             putString("lightningType", view.definition)

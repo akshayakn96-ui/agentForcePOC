@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { SafeAreaView, FlatList, StyleSheet } from 'react-native';
-import { AgentforceService } from 'react-native-agentforce';
+import { SafeAreaView, FlatList, StyleSheet, View, Text, ActivityIndicator } from 'react-native';
+import { AgentforceService, AgentforceHeadlessObserver } from 'react-native-agentforce';
 import ChatBubble from '../components/ChatBubble';
 import { ChatMessage } from '../types/chatMessage';
 import ChatInput from '../components/ChatInputs';
@@ -11,122 +11,96 @@ export default function AgentforceChatScreen() {
   const listRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    const setup = async () => {
-      try {
-        // 1. Ensure Agentforce is configured.
-        // If the user came here directly, we might need to re-run config logic.
-        const info = await AgentforceService.getConfigurationInfo();
-        if (!info.configured) {
-          console.log('Agentforce not configured, attempting auto-config...');
-          // Add a message to UI
-          addMessage('Connecting to Agentforce...', 'agent');
+    let isMounted = true;
 
-          // Try to get saved config and apply it
-          const config = await AgentforceService.getConfiguration();
-          if (config) {
-            await AgentforceService.configure({
-              ...config,
-              type: 'service'
-            });
-          } else {
-            addMessage('Error: Agent not configured. Please go to Settings first.', 'agent');
-            setIsInitializing(false);
-            return;
-          }
-        }
-
-        // 2. Register your hidden fields FIRST
-        const dummyPreChatFields = {
-          First_Name: 'Swetha',
-          Last_Name: 'Patel',
-          MembershipNumber: '4290472034292005',
-        };
-        await AgentforceService.registerHiddenPreChatFields(dummyPreChatFields);
-
-        // 3. Start session headlessly
-        await AgentforceService.startSession();
-        console.log('Headless session started');
-        setIsInitializing(false);
-      } catch (err) {
-        console.error('Failed to initialize custom chat:', err);
-        addMessage('Failed to connect to agent.', 'agent');
-        setIsInitializing(false);
-      }
-    };
-
-    setup();
-
+    // 1. Set up UI delegate FIRST
     AgentforceService.setUIDelegate({
-      // User message
-      onUtteranceSent(event) {
-        console.log('User Utterance Sent:', JSON.stringify(event, null, 2));
-      },
-
-      // Agent response
       onAgentResponse(event) {
+        if (!isMounted) return;
         console.log('--- Agent Response Received (Delegate) ---');
-        console.log(JSON.stringify(event, null, 2));
 
-        if (event.lightningType === 'copilot/endUserMessage') {
-          return; // Ignore user messages echoed by the SDK
-        }
-
-        // Skip partial/streaming messages if you only want final text
+        if (event.lightningType === 'copilot/endUserMessage') return;
         if (event.isPartial) return;
 
-        // 1. Extract text
-        let text = event.message || "";
-
-        // 2. Extract choices (buttons)
+        let text = event.message || '';
         let choicesList: string[] = [];
         if (event.choices && Array.isArray(event.choices)) {
           choicesList = event.choices.map((c: any) => c.label).filter(Boolean);
         }
 
-        // 3. Customize and Add to UI
         if (text || choicesList.length > 0) {
           let customizedText = text;
-
-          // Apply your custom string replacements
-          if (customizedText.includes("Swetha")) {
-            customizedText = customizedText.replace("Digital Assistant", "AI Support");
+          if (customizedText.includes('Swetha')) {
+            customizedText = customizedText.replace('Digital Assistant', 'AI Support');
           }
-
-          // If there are buttons, append them visually for now
           if (choicesList.length > 0) {
             const buttonsText = choicesList.map(label => `[${label}]`).join('  ');
-            customizedText = customizedText
-              ? `${customizedText}\n\n${buttonsText}`
-              : buttonsText;
+            customizedText = customizedText ? `${customizedText}\n\n${buttonsText}` : buttonsText;
           }
-
-          addMessage(customizedText, 'agent');
+          addMessage(customizedText, 'agent', event.responseId);
         }
       },
-
-      onAgentSwitch(event) {
-        console.log('Agent Switched Event:', JSON.stringify(event, null, 2));
+      onUtteranceSent(event) {
+        console.log('Utterance Sent', event);
       },
     });
 
+    const setup = async () => {
+      try {
+        const info = await AgentforceService.getConfigurationInfo();
+        if (!info.configured) {
+          const config = await AgentforceService.getConfiguration();
+          if (config && isMounted) {
+            await AgentforceService.configure({ ...config, type: 'service' });
+          } else {
+            if (isMounted) addMessage('Error: Agent not configured.', 'agent');
+            return;
+          }
+        }
+
+        await AgentforceService.registerHiddenPreChatFields({
+          First_Name: 'Swetha',
+          Last_Name: 'Patel',
+          MembershipNumber: '4290472034292005',
+        });
+
+        await AgentforceService.clearMessageCache();
+        await AgentforceService.startSession();
+        if (isMounted) setIsInitializing(false);
+      } catch (err) {
+        console.error('Setup error:', err);
+        if (isMounted) setIsInitializing(false);
+      }
+    };
+
+    setup();
+
     return () => {
-      // Don't clear if you want to keep receiving events while navigating back
-      // AgentforceService.clearUIDelegate();
+      isMounted = false;
+      AgentforceService.closeConversation().catch(() => {});
+      AgentforceService.clearUIDelegate();
     };
   }, []);
 
-  function addMessage(text: string, sender: 'user' | 'agent') {
+  function addMessage(text: string, sender: 'user' | 'agent', id?: string) {
     if (!text) return;
 
-    setMessages(prev => [
-      ...prev,
-      {
-        id: Date.now().toString() + Math.random(),
-        text,
-        sender,
-        createdAt: Date.now(),
-      },
-    ]);
+    setMessages(prev => {
+      // Deduplicate by ID in React state
+      if (id && prev.some(m => m.id === id)) {
+        return prev;
+      }
+
+      return [
+        ...prev,
+        {
+          id: id || Date.now().toString() + Math.random(),
+          text,
+          sender,
+          createdAt: Date.now(),
+        },
+      ];
+    });
 
     setTimeout(() => {
       listRef.current?.scrollToEnd({
@@ -154,11 +128,22 @@ export default function AgentforceChatScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Invisible observer that triggers SDK events headlessly */}
+      {!isInitializing && <AgentforceHeadlessObserver style={{ width: 1, height: 1, position: 'absolute', opacity: 0 }} />}
+
       <FlatList
         ref={listRef}
         data={messages}
         renderItem={({ item }) => <ChatBubble item={item} />}
         keyExtractor={item => item.id}
+        ListFooterComponent={
+          isInitializing ? (
+            <View style={styles.loadingFooter}>
+              <ActivityIndicator color="#0176D3" />
+              <Text style={styles.loadingText}>Connecting to Agent...</Text>
+            </View>
+          ) : null
+        }
       />
 
       <ChatInput onSend={onSend} />
@@ -170,5 +155,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F4F6F8',
+  },
+  loadingFooter: {
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  loadingText: {
+    color: '#6c757d',
+    fontSize: 14,
   },
 });

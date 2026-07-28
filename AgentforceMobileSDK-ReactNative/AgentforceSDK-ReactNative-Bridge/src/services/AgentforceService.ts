@@ -1057,6 +1057,16 @@ class AgentforceService {
   }
 
   /**
+   * Clear the message duplicate cache.
+   * Call when starting a new chat session to ensure new messages are processed.
+   */
+  async clearMessageCache(): Promise<void> {
+    if (AgentforceModule?.clearMessageCache) {
+      await AgentforceModule.clearMessageCache();
+    }
+  }
+
+  /**
    * Get the currently registered hidden prechat field values.
    *
    * @returns The stored field map, or an empty object if none registered.

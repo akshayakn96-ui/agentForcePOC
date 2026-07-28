@@ -6,6 +6,7 @@
  */
 
 export { default as AgentforceService } from './services/AgentforceService';
+export { default as AgentforceHeadlessObserver } from './components/AgentforceHeadlessObserver';
 export {
   isEmployeeAgentAuthSupported,
   hasEmployeeAgentSession,

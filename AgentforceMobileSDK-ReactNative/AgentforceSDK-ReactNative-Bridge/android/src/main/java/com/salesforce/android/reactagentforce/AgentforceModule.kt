@@ -249,6 +249,7 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
                 // Initialize client
                 val client = AgentforceClient()
                 client.init(
+                    coroutineScope = scope,
                     agentforceMode = sdkMode,
                     application = reactApplicationContext.applicationContext as Application,
                     hiddenPreChatFieldDelegate = bridgeHiddenPreChat
@@ -412,6 +413,7 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
                 // Initialize client
                 val client = AgentforceClient()
                 client.init(
+                    coroutineScope = scope,
                     agentforceMode = sdkMode,
                     application = reactApplicationContext.applicationContext as Application
                 )
@@ -788,6 +790,13 @@ class AgentforceModule(reactContext: ReactApplicationContext) :
         promise.resolve(Arguments.createMap().apply {
             putBoolean("success", true)
         })
+    }
+
+    @ReactMethod
+    fun clearMessageCache(promise: Promise) {
+        bridgeViewProvider.reset()
+        bridgeUIDelegate.clearCache()
+        promise.resolve(true)
     }
 
     // endregion
